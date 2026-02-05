@@ -1,5 +1,5 @@
 name: magtapp
-description: "A new Flutter project."
+description: "AI-powered in-app browser and document summarizer (SDE-2 Flutter assignment)."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -31,6 +31,33 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # In-app browser
+  webview_flutter: ^4.13.0
+  webview_flutter_web: ^0.2.3+4
+
+  # Storage / database
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.4
+
+  # File picking
+  file_picker: ^8.1.4
+
+  # Networking for mock / real AI + translation APIs
+  http: ^1.2.2
+
+  # Sharing, clipboard, etc.
+  share_plus: ^10.0.2
+
+  # JSON, time formatting helpers
+  intl: ^0.19.0
+
+  # For PWA web install prompt helpers (optional, used in README)
+  flutter_web_plugins:
+    sdk: flutter
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
