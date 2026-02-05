@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,41 +18,43 @@ class InAppBrowserView extends ConsumerStatefulWidget {
 }
 
 class _InAppBrowserViewState extends ConsumerState<InAppBrowserView> {
-  late final WebViewController _controller;
-  String _currentUrl = '';
+  // Only initialized on non-web platforms.
+  WebViewController? _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (url) {
-            _currentUrl = url;
-            ref.read(browserTabsProvider.notifier).updateTab(
-                  widget.tabId,
-                  (t) => t.copyWith(isLoading: true, url: url),
-                );
-          },
-          onPageFinished: (url) async {
-            final title = await _controller.getTitle();
-            ref.read(browserTabsProvider.notifier).updateTab(
-                  widget.tabId,
-                  (t) => t.copyWith(
-                    isLoading: false,
-                    url: url,
-                    title: title ?? t.title,
-                  ),
-                );
-          },
-          onWebResourceError: (error) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Load error: ${error.description}')),
-            );
-          },
-        ),
-      );
+
+    if (!kIsWeb) {
+      _controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageStarted: (url) {
+              ref.read(browserTabsProvider.notifier).updateTab(
+                    widget.tabId,
+                    (t) => t.copyWith(isLoading: true, url: url),
+                  );
+            },
+            onPageFinished: (url) async {
+              final title = await _controller!.getTitle();
+              ref.read(browserTabsProvider.notifier).updateTab(
+                    widget.tabId,
+                    (t) => t.copyWith(
+                      isLoading: false,
+                      url: url,
+                      title: title ?? t.title,
+                    ),
+                  );
+            },
+            onWebResourceError: (error) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Load error: ${error.description}')),
+              );
+            },
+          ),
+        );
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final tab = ref
@@ -66,8 +66,15 @@ class _InAppBrowserViewState extends ConsumerState<InAppBrowserView> {
 
   void _loadUrl(String url) {
     final normalized = url.startsWith('http') ? url : 'https://$url';
-    _controller.loadRequest(Uri.parse(normalized));
+    if (kIsWeb) {
+      setState(() => _webUrl = normalized);
+    } else {
+      _controller!.loadRequest(Uri.parse(normalized));
+    }
   }
+
+  // Tracks the current URL for the web iframe.
+  String _webUrl = '';
 
   @override
   Widget build(BuildContext context) {
@@ -97,38 +104,72 @@ class _InAppBrowserViewState extends ConsumerState<InAppBrowserView> {
                   onSubmitted: _loadUrl,
                 ),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.arrow_back),
-                tooltip: 'Back',
-                onPressed: () => _controller.goBack(),
-              ),
-              IconButton(
-                icon: const Icon(Icons.arrow_forward),
-                tooltip: 'Forward',
-                onPressed: () => _controller.goForward(),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                tooltip: 'Refresh',
-                onPressed: () => _controller.reload(),
-              ),
+              if (!kIsWeb) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  tooltip: 'Back',
+                  onPressed: () => _controller!.goBack(),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_forward),
+                  tooltip: 'Forward',
+                  onPressed: () => _controller!.goForward(),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh',
+                  onPressed: () => _controller!.reload(),
+                ),
+              ],
             ],
           ),
         ),
         Expanded(
-          child: Stack(
-            children: [
-              WebViewWidget(controller: _controller),
-              if (tab.isLoading)
-                const Align(
-                  alignment: Alignment.topCenter,
-                  child: LinearProgressIndicator(minHeight: 2),
+          child: kIsWeb
+              ? _buildWebIframe()
+              : Stack(
+                  children: [
+                    WebViewWidget(controller: _controller!),
+                    if (tab.isLoading)
+                      const Align(
+                        alignment: Alignment.topCenter,
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                  ],
                 ),
-            ],
-          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildWebIframe() {
+    if (_webUrl.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    // HtmlElementView renders a platform view; on web, webview_flutter_web
+    // is not reliable, so we embed a simple iframe via url_launcher or
+    // show a message directing the user to open the link externally.
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.public, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(
+            _webUrl,
+            style: const TextStyle(fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'In-app WebView is not available on the web platform.\n'
+            'Use Android or iOS for the full browser experience.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey),
+          ),
+        ],
+      ),
     );
   }
 }
