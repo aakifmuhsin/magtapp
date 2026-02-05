@@ -20,61 +20,110 @@ class BrowserTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     return Material(
-      elevation: 1,
-      color: Theme.of(context).colorScheme.surface,
+      elevation: 2,
+      color: colors.surface,
       child: SizedBox(
-        height: 44,
+        height: 46,
         child: Row(
           children: [
             Expanded(
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                itemCount: tabs.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 4),
                 itemBuilder: (context, index) {
                   final tab = tabs[index];
                   final isActive = tab.id == activeTabId;
+
                   return GestureDetector(
                     onTap: () => onTabSelected(tab.id),
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeInOut,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
+                        horizontal: 14,
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
                         color: isActive
-                            ? Theme.of(context)
-                                .colorScheme
-                                .primary
-                                .withOpacity(0.12)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(16),
+                            ? colors.primaryContainer
+                            : colors.surfaceContainerHighest
+                                .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(20),
+                        border: isActive
+                            ? Border.all(
+                                color: colors.primary.withValues(alpha: 0.3))
+                            : null,
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.language,
-                            size: 16,
-                            color: isActive
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).iconTheme.color,
+                          // Loading dot or icon
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: tab.isLoading
+                                ? SizedBox(
+                                    key: const ValueKey('loading'),
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: isActive
+                                          ? colors.primary
+                                          : colors.outline,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.language,
+                                    key: const ValueKey('icon'),
+                                    size: 16,
+                                    color: isActive
+                                        ? colors.primary
+                                        : colors.onSurfaceVariant,
+                                  ),
                           ),
-                          const SizedBox(width: 6),
-                          SizedBox(
-                            width: 120,
+                          const SizedBox(width: 8),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 110),
                             child: Text(
-                              tab.title ?? tab.url,
+                              tab.title ?? _shortenUrl(tab.url),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isActive
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: isActive
+                                    ? colors.onPrimaryContainer
+                                    : colors.onSurfaceVariant,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 6),
                           GestureDetector(
                             onTap: () => onCloseTab(tab.id),
-                            child: const Icon(
-                              Icons.close,
-                              size: 16,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isActive
+                                    ? colors.primary.withValues(alpha: 0.1)
+                                    : Colors.transparent,
+                              ),
+                              child: Icon(
+                                Icons.close,
+                                size: 14,
+                                color: isActive
+                                    ? colors.primary
+                                    : colors.outline,
+                              ),
                             ),
                           ),
                         ],
@@ -82,19 +131,34 @@ class BrowserTabBar extends StatelessWidget {
                     ),
                   );
                 },
-                separatorBuilder: (_, __) => const SizedBox(width: 4),
-                itemCount: tabs.length,
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: 'New tab',
-              onPressed: onAddTab,
+            Container(
+              margin: const EdgeInsets.only(right: 4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.primaryContainer,
+              ),
+              child: IconButton(
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+                icon: Icon(Icons.add, color: colors.primary),
+                tooltip: 'New tab',
+                onPressed: onAddTab,
+              ),
             ),
           ],
         ),
       ),
     );
   }
-}
 
+  String _shortenUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      return uri.host.isNotEmpty ? uri.host : url;
+    } catch (_) {
+      return url;
+    }
+  }
+}

@@ -4,6 +4,7 @@ class BrowserTab {
     required this.url,
     this.title,
     this.isLoading = false,
+    this.progress = 0.0,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -11,6 +12,7 @@ class BrowserTab {
   final String url;
   final String? title;
   final bool isLoading;
+  final double progress;
   final DateTime createdAt;
 
   BrowserTab copyWith({
@@ -18,6 +20,7 @@ class BrowserTab {
     String? url,
     String? title,
     bool? isLoading,
+    double? progress,
     DateTime? createdAt,
   }) {
     return BrowserTab(
@@ -25,6 +28,7 @@ class BrowserTab {
       url: url ?? this.url,
       title: title ?? this.title,
       isLoading: isLoading ?? this.isLoading,
+      progress: progress ?? this.progress,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -50,4 +54,3 @@ class BrowserTab {
     );
   }
 }
-

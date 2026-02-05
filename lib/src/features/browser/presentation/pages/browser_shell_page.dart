@@ -40,6 +40,11 @@ class _BrowserShellPageState extends ConsumerState<BrowserShellPage> {
     final currentActiveId =
         activeTabId ?? (tabs.isNotEmpty ? tabs.last.id : null);
 
+    // Determine the active tab index for IndexedStack.
+    final activeIndex = currentActiveId != null
+        ? tabs.indexWhere((t) => t.id == currentActiveId)
+        : -1;
+
     Widget body;
     switch (_selected) {
       case BottomNavItem.home:
@@ -50,18 +55,43 @@ class _BrowserShellPageState extends ConsumerState<BrowserShellPage> {
               activeTabId: currentActiveId,
               onTabSelected: (id) =>
                   ref.read(activeTabIdProvider.notifier).state = id,
-              onAddTab: () =>
-                  ref.read(browserTabsProvider.notifier).addTab(),
-              onCloseTab: (id) =>
-                  ref.read(browserTabsProvider.notifier).closeTab(id),
+              onAddTab: () {
+                ref.read(browserTabsProvider.notifier).addTab();
+                // Auto-select the new tab.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  final latest = ref.read(browserTabsProvider);
+                  if (latest.isNotEmpty) {
+                    ref.read(activeTabIdProvider.notifier).state =
+                        latest.last.id;
+                  }
+                });
+              },
+              onCloseTab: (id) {
+                ref.read(browserTabsProvider.notifier).closeTab(id);
+                // If we closed the active tab, pick a new one.
+                if (id == currentActiveId) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    final remaining = ref.read(browserTabsProvider);
+                    ref.read(activeTabIdProvider.notifier).state =
+                        remaining.isNotEmpty ? remaining.last.id : null;
+                  });
+                }
+              },
             ),
             Expanded(
-              child: currentActiveId == null
+              child: tabs.isEmpty || activeIndex < 0
                   ? const Center(
                       child: Text('No open tabs. Tap + to create one.'),
                     )
-                  : InAppBrowserView(
-                      tabId: currentActiveId,
+                  : IndexedStack(
+                      index: activeIndex,
+                      children: [
+                        for (final tab in tabs)
+                          InAppBrowserView(
+                            key: ValueKey(tab.id),
+                            tabId: tab.id,
+                          ),
+                      ],
                     ),
             ),
             const SummaryPanel(),
@@ -72,33 +102,7 @@ class _BrowserShellPageState extends ConsumerState<BrowserShellPage> {
         body = const FileManagerPage();
         break;
       case BottomNavItem.tabs:
-        body = ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text(
-              'Open Tabs',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            for (final t in tabs)
-              ListTile(
-                title: Text(t.title ?? t.url),
-                subtitle: Text(t.url),
-                trailing: IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => ref
-                      .read(browserTabsProvider.notifier)
-                      .closeTab(t.id),
-                ),
-                onTap: () {
-                  setState(() {
-                    _selected = BottomNavItem.home;
-                  });
-                  ref.read(activeTabIdProvider.notifier).state = t.id;
-                },
-              ),
-          ],
-        );
+        body = _buildTabsOverview(tabs, currentActiveId);
         break;
       case BottomNavItem.settings:
         body = const SettingsPage();
@@ -109,27 +113,38 @@ class _BrowserShellPageState extends ConsumerState<BrowserShellPage> {
       appBar: AppBar(
         title: const Text('MagTapp AI Browser'),
       ),
-      body: body,
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        child: KeyedSubtree(
+          key: ValueKey(_selected),
+          child: body,
+        ),
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selected.index,
         onTap: (i) => setState(() {
           _selected = BottomNavItem.values[i];
         }),
+        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.folder),
+            icon: Icon(Icons.folder_outlined),
+            activeIcon: Icon(Icons.folder),
             label: 'Files',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.tab),
+            icon: Icon(Icons.tab_outlined),
+            activeIcon: Icon(Icons.tab),
             label: 'Tabs',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
+            icon: Icon(Icons.settings_outlined),
+            activeIcon: Icon(Icons.settings),
             label: 'Settings',
           ),
         ],
@@ -137,6 +152,71 @@ class _BrowserShellPageState extends ConsumerState<BrowserShellPage> {
       floatingActionButton: _selected == BottomNavItem.home
           ? const _SummarizeFab()
           : null,
+    );
+  }
+
+  Widget _buildTabsOverview(List tabs, String? currentActiveId) {
+    if (tabs.isEmpty) {
+      return const Center(child: Text('No open tabs.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: tabs.length + 1, // +1 for header
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Open Tabs (${tabs.length})',
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          );
+        }
+
+        final t = tabs[index - 1];
+        final isActive = t.id == currentActiveId;
+
+        return Card(
+          elevation: isActive ? 2 : 0,
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: Icon(
+              Icons.language,
+              color: isActive
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            title: Text(
+              t.title ?? t.url,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              t.url,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => ref
+                  .read(browserTabsProvider.notifier)
+                  .closeTab(t.id),
+            ),
+            onTap: () {
+              ref.read(activeTabIdProvider.notifier).state = t.id;
+              setState(() {
+                _selected = BottomNavItem.home;
+              });
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -148,7 +228,6 @@ class _SummarizeFab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return FloatingActionButton.extended(
       onPressed: () {
-        // The SummaryPanel listens to this provider and will trigger extraction.
         ref
             .read(summaryActionTriggerProvider.notifier)
             .triggerFromActiveContext();
@@ -158,4 +237,3 @@ class _SummarizeFab extends ConsumerWidget {
     );
   }
 }
-
