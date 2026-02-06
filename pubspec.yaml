@@ -52,6 +52,12 @@ dependencies:
   # Sharing, clipboard, etc.
   share_plus: ^10.0.2
 
+  # Open files with system viewer
+  open_filex: ^4.5.0
+
+  # MIME type detection
+  mime: ^2.0.0
+
   # ID generation
   uuid: ^4.5.1
 
