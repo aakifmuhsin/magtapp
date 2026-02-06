@@ -4,6 +4,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/utils/file_utils.dart';
+import '../../../files/application/download_controller.dart';
+import '../../../files/presentation/widgets/download_confirmation_dialog.dart';
 import '../../application/browser_tab_controller.dart';
 
 class InAppBrowserView extends ConsumerStatefulWidget {
@@ -199,6 +202,7 @@ class _InAppBrowserViewState extends ConsumerState<InAppBrowserView>
               allowsInlineMediaPlayback: true,
               iframeAllow: 'camera; microphone',
               iframeAllowFullscreen: true,
+              useOnDownloadStart: true,
             ),
             onWebViewCreated: (controller) {
               _webViewController = controller;
@@ -252,6 +256,45 @@ class _InAppBrowserViewState extends ConsumerState<InAppBrowserView>
                     widget.tabId,
                     (t) => t.copyWith(isLoading: false, progress: 0),
                   );
+            },
+            onDownloadStartRequest: (controller, downloadStartRequest) async {
+              final url = downloadStartRequest.url.toString();
+              final suggestedFilename = downloadStartRequest.suggestedFilename ??
+                  Uri.parse(url).pathSegments.lastOrNull ??
+                  'download';
+              final mimeType = downloadStartRequest.mimeType ??
+                  FileUtils.inferMimeType(suggestedFilename);
+              final contentLength = downloadStartRequest.contentLength;
+
+              // On web, delegate to the browser's native download.
+              if (kIsWeb) {
+                ref.read(downloadControllerProvider.notifier).startDownload(
+                      url: url,
+                      suggestedFileName: suggestedFilename,
+                      mimeType: mimeType,
+                      contentLength: contentLength,
+                    );
+                return;
+              }
+
+              // On mobile, show confirmation dialog first.
+              if (!mounted) return;
+              final confirmed = await DownloadConfirmationDialog.show(
+                context,
+                fileName: suggestedFilename,
+                url: url,
+                contentLength: contentLength,
+                mimeType: mimeType,
+              );
+
+              if (confirmed) {
+                ref.read(downloadControllerProvider.notifier).startDownload(
+                      url: url,
+                      suggestedFileName: suggestedFilename,
+                      mimeType: mimeType,
+                      contentLength: contentLength,
+                    );
+              }
             },
           ),
         ),
